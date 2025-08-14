@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JJ's Arbitrage — Live FX & Crypto Scanner</title>
+<meta name="description" content="JJ's Arbitrage scans live FX and crypto rates to find profitable arbitrage cycles, explains the exact steps, and shows profit per cycle.">
+<style>
+  :root{--bg:#0f1220;--card:#171a2b;--ink:#e6e9f5;--muted:#9aa0b5;--accent:#6ee7b7;--warn:#f59e0b;--bad:#ef4444;--good:#22c55e;--lightbg:#f7fafc;--link:#60a5fa}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif}
+  a{color:var(--link)}
+  .wrap{max-width:1200px;margin:24px auto;padding:0 16px}
+  h1{font-size:28px;margin:0 0 10px}
+  p{color:var(--muted)}
+  .card{background:var(--card);border:1px solid #242948;border-radius:12px;padding:16px;margin:16px 0}
+  .row{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
+  .col-3{grid-column:span 3}.col-4{grid-column:span 4}.col-6{grid-column:span 6}.col-8{grid-column:span 8}.col-12{grid-column:span 12}
+  label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
+  input,select,button,textarea{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #2a3053;background:#101327;color:var(--ink);outline:none}
+  button{cursor:pointer;border:1px solid #394073;background:#1a2042}
+  button:hover{filter:brightness(1.08)}
+  .pill{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;border:1px solid #30385f;margin-right:6px}
+  .pill.good{background:#0f2a1d;color:#bffad1;border-color:#1f5f3c}
+  .pill.bad{background:#2a1010;color:#ffd1d1;border-color:#5f1f1f}
+  .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
+  .result{padding:10px 12px;border-radius:8px;background:#0f132b;border:1px dashed #2c3360;margin-top:10px}
+  .small{font-size:12px}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media (max-width:900px){.col-8,.col-6,.col-4,.col-3{grid-column:span 12} .grid-2{grid-template-columns:1fr}}
+  /* Landing */
+  .hero{background:linear-gradient(180deg,#e8f0ff,#ffffff);color:#0f172a;border:1px solid #e5e7eb;border-radius:16px;padding:28px;margin:16px 0}
+  .hero .btn{display:inline-block;background:#2563eb;color:#fff;padding:12px 18px;border-radius:10px;text-decoration:none;border:1px solid #1d4ed8}
+  .hero p{color:#334155}
+  .hero-wrap{background:var(--lightbg)}
+</style>
+</head>
+<body>
+
+<div id="landing" class="hero-wrap">
+  <div class="wrap">
+    <div class="hero">
+      <h1>JJ’s Arbitrage</h1>
+      <p>Live FX & Crypto arbitrage opportunity scanner. Finds profitable cycles (e.g., ZAR → USD → GBP → ZAR), shows exact steps and profit per cycle. Runs in your browser.</p>
+      <a href="#app" class="btn" onclick="showApp()">🚀 Launch Scanner</a>
+      <p class="small" style="margin-top:10px">Tip: Add this page to your phone’s Home Screen to use it like an app.</p>
+    </div>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+  <div class="wrap">
+    <h1>JJ’s Arbitrage — Live Scanner</h1>
+    <p>Auto-detects arbitrage cycles across currencies (ZAR, USD, EUR, GBP, JPY, etc.) and popular crypto. Shows a clear, step-by-step plan and exact profit per cycle.</p>
+
+    <div class="card">
+      <div class="row">
+        <div class="col-3">
+          <label>Data source</label>
+          <select id="source">
+            <option value="fx">Live FX (exchangerate.host)</option>
+            <option value="crypto">Live Crypto (CoinGecko)</option>
+            <option value="manual">Manual paste</option>
+          </select>
+        </div>
+        <div class="col-3">
+          <label>Start currency</label>
+          <input id="start_ccy" value="ZAR">
+        </div>
+        <div class="col-3">
+          <label>Start amount</label>
+          <input id="start_amt" type="number" step="0.000001" value="1000">
+        </div>
+        <div class="col-3">
+          <label>Per-trade fee/slippage %</label>
+          <input id="fee_pct" type="number" step="0.001" value="0.10">
+        </div>
+
+        <div class="col-8">
+          <label>Currencies / Assets to include (comma-separated, empty = recommended set)</label>
+          <input id="symbols" placeholder="e.g., ZAR,USD,EUR,GBP,JPY,BTC,ETH">
+        </div>
+        <div class="col-4">
+          <label>Auto-refresh (seconds, 0 = off)</label>
+          <input id="refresh" type="number" step="1" value="30">
+        </div>
+
+        <div class="col-12">
+          <button onclick="scan()">🔎 Scan Now</button>
+          <span id="status" class="small" style="margin-left:8px;color:#9aa0b5"></span>
+        </div>
+
+        <div class="col-12">
+          <div id="result" class="result small"></div>
+        </div>
+      </div>
+
+      <details style="margin-top:12px">
+        <summary class="small">Manual quotes (optional)</summary>
+        <div class="row">
+          <div class="col-8">
+            <label>Paste quotes as <span class="mono">BASE/QUOTE rate</span> (one per line)</label>
+            <textarea id="manual_quotes" style="min-height:120px">EUR/USD 1.0850
+USD/JPY 156.20
+EUR/JPY 169.48
+USD/ZAR 18.20</textarea>
+          </div>
+          <div class="col-4 small">
+            <p class="small">With “Manual paste”, the scanner uses these quotes and looks for cycles.</p>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <div class="card small">
+      <strong>Note:</strong> Educational tool. Real execution has spreads, fees, latency, limits, and taxes. Model those via the per-trade fee %.
+    </div>
+  </div>
+</div>
+
+<script>
+function showApp(){ document.getElementById('landing').style.display='none'; document.getElementById('app').style.display='block'; }
+
+const RECOMMENDED_FX = ["USD","EUR","GBP","ZAR","JPY","CHF","AUD","CAD","NZD","CNY","SEK","NOK","DKK","HKD","SGD"];
+const RECOMMENDED_CRYPTO = ["BTC","ETH","USDT","USDC","BNB","XRP","SOL","ADA","DOGE","TRX","TON"];
+
+function fmt(n,d=6){ return Number(n).toLocaleString(undefined,{maximumFractionDigits:d}) }
+function uniqueList(list){ return [...new Set(list.filter(Boolean).map(s=>s.trim().toUpperCase()))]; }
+
+function buildGraphFromFXRates(baseUSDMap, symbols){
+  const nodes = uniqueList(symbols.length?symbols:[...RECOMMENDED_FX]);
+  const rates = {};
+  for(const u of nodes){
+    for(const v of nodes){
+      if(u===v) continue;
+      const ru = baseUSDMap[u];
+      const rv = baseUSDMap[v];
+      if(ru && rv){ rates[u+"_"+v] = rv/ru; }
+    }
+  }
+  return {nodes, rates};
+}
+function buildGraphFromCryptoUSD(usdMap, symbols){
+  const nodes = uniqueList(symbols.length?symbols:[...RECOMMENDED_CRYPTO]);
+  const rates = {};
+  for(const u of nodes){
+    for(const v of nodes){
+      if(u===v) continue;
+      const pu = usdMap[u], pv = usdMap[v];
+      if(pu && pv){ rates[u+"_"+v] = pv/pu; }
+    }
+  }
+  return {nodes, rates};
+}
+function parseManual(text){
+  const lines = text.split(/\n+/).map(s=>s.trim()).filter(Boolean);
+  const rates = {}; const nodes=new Set();
+  for(const line of lines){
+    const m = line.match(/^([A-Za-z]{3})[\/\-\s]?([A-Za-z]{3})\s+([0-9]*\.?[0-9]+)$/);
+    if(!m) continue;
+    const a=m[1].toUpperCase(), b=m[2].toUpperCase(), r=parseFloat(m[3]);
+    if(r>0){ rates[a+"_"+b]=r; rates[b+"_"+a]=1/r; nodes.add(a); nodes.add(b); }
+  }
+  return {nodes:[...nodes], rates};
+}
+
+// Enumerate triangular cycles (fast + robust in browser)
+function allTriangles(nodes){
+  const tri=[];
+  for(let i=0;i<nodes.length;i++){
+    for(let j=i+1;j<nodes.length;j++){
+      for(let k=j+1;k<nodes.length;k++){
+        tri.push([nodes[i],nodes[j],nodes[k]]);
+      }
+    }
+  }
+  return tri;
+}
+
+function simulatePath(path, rates, feePct, startAmt){
+  let amt=startAmt;
+  const steps=[];
+  for(let i=0;i<path.length-1;i++){
+    const u=path[i], v=path[i+1];
+    const r=rates[u+"_"+v];
+    if(!r) return null;
+    const eff=r*(1-feePct);
+    const after=amt*eff;
+    steps.push({u,v,rate:r,afterFee:eff,before:amt,after});
+    amt=after;
+  }
+  return {steps, final:amt, profit:amt-startAmt, roi:(amt/startAmt-1)*100};
+}
+
+// Check all 3-currency loops a->b->c->a
+function scanTriangles(nodes, rates, feePct, startCcy, startAmt){
+  const tri=allTriangles(nodes);
+  const out=[];
+  for(const [a,b,c] of tri){
+    // directions that return to a
+    const paths=[ [a,b,c,a], [a,c,b,a] ];
+    for(const path of paths){
+      const sim=simulatePath(path, rates, feePct, startAmt);
+      if(!sim) continue;
+      if(sim.profit>0) out.push({path, ...sim});
+    }
+  }
+  // sort by ROI desc
+  out.sort((x,y)=>y.roi-x.roi);
+  return out;
+}
+
+async function fetchFX(symbols){
+  const res = await fetch("https://api.exchangerate.host/latest?base=USD");
+  if(!res.ok) throw new Error("FX fetch failed");
+  const js = await res.json();
+  const baseUSDMap = {USD:1.0, ...js.rates};
+  return buildGraphFromFXRates(baseUSDMap, symbols);
+}
+async function fetchCrypto(symbols){
+  const idMap = {BTC:"bitcoin", ETH:"ethereum", USDT:"tether", USDC:"usd-coin", BNB:"binancecoin", XRP:"ripple", SOL:"solana", ADA:"cardano", DOGE:"dogecoin", TRX:"tron", TON:"the-open-network"};
+  const use = uniqueList(symbols.length?symbols:RECOMMENDED_CRYPTO).filter(s=>idMap[s]);
+  const ids = use.map(s=>idMap[s]).join(",");
+  const url = "https://api.coingecko.com/api/v3/simple/price?vs_currencies=usd&ids="+encodeURIComponent(ids);
+  const res = await fetch(url);
+  if(!res.ok) throw new Error("Crypto fetch failed");
+  const js = await res.json();
+  const usdMap={};
+  for(const [sym,id] of Object.entries(idMap)){ if(js[id] && js[id].usd) usdMap[sym]=js[id].usd; }
+  return buildGraphFromCryptoUSD(usdMap, use);
+}
+
+let timer=null;
+async function scan(){
+  const status=document.getElementById('status');
+  const result=document.getElementById('result');
+  const source=document.getElementById('source').value;
+  const startCcy=(document.getElementById('start_ccy').value||"USD").trim().toUpperCase();
+  const startAmt=parseFloat(document.getElementById('start_amt').value||0)||1000;
+  const feePct=(parseFloat(document.getElementById('fee_pct').value||0))/100.0;
+  const syms=uniqueList((document.getElementById('symbols').value||"").split(","));
+  const refresh=parseInt(document.getElementById('refresh').value||0);
+
+  try{
+    status.textContent="Fetching rates…";
+    let data;
+    if(source==="fx") data = await fetchFX(syms);
+    else if(source==="crypto") data = await fetchCrypto(syms);
+    else data = parseManual(document.getElementById('manual_quotes').value);
+
+    const {nodes, rates} = data;
+    if(!nodes.includes(startCcy)) nodes.unshift(startCcy);
+
+    status.textContent = `Scanning ${nodes.length} assets…`;
+    const ops = scanTriangles(nodes, rates, feePct, startCcy, startAmt);
+
+    if(ops.length===0){
+      result.innerHTML = '<span class="pill bad">No arbitrage opportunities right now across the selected set.</span>';
+    }else{
+      const top = ops.slice(0,5);
+      let html = `<span class="pill good">Arbitrage opportunities found: ${top.length}</span>`;
+      for(const op of top){
+        const arrow = op.path.join(" → ");
+        const lines = op.steps.map(s=>`${s.u} → ${s.v} @ ${fmt(s.rate,8)} (after fee: ${fmt(s.afterFee,8)}) | ${fmt(s.before,6)} → ${fmt(s.after,6)}`).join("<br>");
+        html += `<div class="result" style="margin-top:10px">
+          <div class="mono small">${arrow}</div>
+          <div class="small">${lines}</div>
+          <div class="grid-2">
+            <div>Net profit (per ${fmt(startAmt,2)} ${op.path[0]}): <span class="mono">${fmt(op.profit,6)} ${op.path[0]}</span></div>
+            <div>ROI: <span class="mono">${fmt(op.roi,4)}%</span></div>
+          </div>
+        </div>`;
+      }
+      result.innerHTML = html;
+    }
+  }catch(e){
+    result.innerHTML = `<span class="pill bad">Error:</span> ${e.message||e}`;
+    status.textContent = '';
+  }
+
+  if(timer){ clearInterval(timer); timer=null; }
+  if(refresh>0){
+    timer=setInterval(scan, refresh*1000);
+    status.textContent += ` Auto-refresh every ${refresh}s.`;
+  }
+}
+</script>
+</body>
+</html>
